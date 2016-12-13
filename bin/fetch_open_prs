@@ -1,0 +1,32 @@
+#!/usr/bin/env ruby
+
+require 'dotenv'
+require 'octokit'
+require "slack"
+
+Dotenv.load
+ORG_NAME = "ombulabs"
+
+gh = Octokit::Client.new(access_token: ENV["GITHUB_TOKEN"])
+repos = gh.organization_repositories(ORG_NAME).map { |repo| repo.name }
+
+open_pull_requests = repos.inject([]) do |prs, repo|
+  gh.pulls("#{ORG_NAME}/#{repo}").each do |pull|
+    pr_hash = {
+      repo: repo,
+      name: pull.title,
+      url: pull.html_url,
+      created_at: pull.created_at,
+      updated_at: pull.updated_at,
+      creator: "@" + pull.user.login
+    }
+    prs << pr_hash
+  end
+  prs
+end
+
+result = open_pull_requests.map { |pr| [ pr[:repo], pr[:name], pr[:url], "-----------" ] }
+puts result
+
+slack = Slack::Client.new(token: ENV["SLACK_API_TOKEN"])
+slack.chat_postMessage(channel: "@mauro-oto", text: result.join("\n"), username: "Open Organization PRs")
